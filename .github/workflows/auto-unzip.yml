@@ -1,0 +1,49 @@
+name: Auto Unzip for Railway
+
+on:
+  push:
+    branches:
+      - main # Ubah ke 'master' jika branch utama Anda menggunakan master
+    paths:
+      - '**.zip'
+
+permissions:
+  contents: write
+
+jobs:
+  unzip-and-commit:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Extract ZIP file to root
+        run: |
+          mkdir -p _temp_extract
+          for z in *.zip; do
+            [ -f "$z" ] || continue
+            unzip -qo "$z" -d _temp_extract
+            rm -f "$z"
+          done
+
+          shopt -s nullglob
+          items=(_temp_extract/*)
+          # Jika isi ZIP terbungkus dalam 1 folder utama, pindahkan isinya langsung ke root
+          if [ ${#items[@]} -eq 1 ] && [ -d "${items[0]}" ]; then
+            rsync -a --exclude='.git' "${items[0]}/" ./
+          else
+            rsync -a --exclude='.git' "_temp_extract/" ./
+          fi
+
+          rm -rf _temp_extract
+
+      - name: Commit and push extracted files
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if ! git diff --staged --quiet; then
+            git commit -m "chore: auto-unzip source files for Railway"
+            git push
+          fi
